@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ticket Transcript - <%= ticket.id %></title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #0f172a; color: #e2e8f0; }
+    </style>
+</head>
+<body class="p-8 max-w-4xl mx-auto">
+    <div class="mb-6 flex justify-between items-center">
+        <div>
+            <h1 class="text-2xl font-bold text-white">Transcript #<%= ticket.channelId %></h1>
+            <p class="text-slate-400">Closed by <%= ticket.closedBy %> on <%= new Date(ticket.closedAt).toLocaleString() %></p>
+        </div>
+        <a href="/dashboard" class="bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded text-sm">Back to Dashboard</a>
+    </div>
+
+    <div class="bg-slate-900 p-6 rounded-lg shadow-xl font-mono text-sm whitespace-pre-wrap leading-relaxed border border-slate-800">
+<%= ticket.transcript %>
+    </div>
+</body>
+</html>

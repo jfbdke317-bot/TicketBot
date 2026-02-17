@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TicketBot - Deploy Panel</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #0f172a; color: #e2e8f0; }
+        .card { background-color: #1e293b; border-radius: 0.5rem; padding: 1.5rem; }
+    </style>
+</head>
+<body class="flex h-screen overflow-hidden">
+    
+    <!-- Sidebar -->
+    <div class="w-64 bg-slate-900 border-r border-slate-800 flex flex-col">
+        <div class="p-6">
+            <h1 class="text-xl font-bold text-indigo-500">TicketBot</h1>
+        </div>
+        <nav class="flex-1 px-4 space-y-2">
+            <a href="/dashboard" class="block px-4 py-2 rounded hover:bg-slate-800 text-slate-300">Dashboard</a>
+            <a href="/deploy" class="block px-4 py-2 rounded bg-indigo-600 text-white">Deploy Panel</a>
+        </nav>
+        <div class="p-4 border-t border-slate-800">
+            <div class="flex items-center gap-3">
+                <img src="https://cdn.discordapp.com/avatars/<%= user.id %>/<%= user.avatar %>.png" class="w-8 h-8 rounded-full">
+                <div class="truncate">
+                    <p class="text-sm font-medium"><%= user.username %></p>
+                    <a href="/logout" class="text-xs text-red-400 hover:text-red-300">Logout</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <main class="flex-1 overflow-y-auto p-8">
+        
+        <h2 class="text-2xl font-bold mb-6">Deploy Ticket Panel</h2>
+
+        <div class="card max-w-2xl mx-auto">
+            <form action="/api/deploy-panel" method="POST" class="space-y-6">
+                
+                <!-- Server Selection -->
+                <div>
+                    <label class="block text-sm font-medium mb-1">1. Select Server</label>
+                    <select id="guildSelect" name="guildId" required class="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 focus:outline-none focus:border-indigo-500">
+                        <option value="">-- Choose a Server --</option>
+                        <% guilds.forEach(g => { %>
+                            <option value="<%= g.id %>"><%= g.name %></option>
+                        <% }) %>
+                    </select>
+                </div>
+
+                <!-- Channel Selection -->
+                <div>
+                    <label class="block text-sm font-medium mb-1">2. Select Channel</label>
+                    <select id="channelSelect" name="channelId" required disabled class="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 focus:outline-none focus:border-indigo-500 disabled:opacity-50">
+                        <option value="">-- First Select Server --</option>
+                    </select>
+                </div>
+
+                <hr class="border-slate-700">
+
+                <!-- Embed Configuration -->
+                <div>
+                    <label class="block text-sm font-medium mb-1">Embed Title</label>
+                    <input type="text" name="title" value="Support Tickets" class="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 focus:outline-none focus:border-indigo-500">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium mb-1">Description</label>
+                    <textarea name="description" class="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 focus:outline-none focus:border-indigo-500 h-24">Click the button below to open a ticket.</textarea>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Embed Color (Hex)</label>
+                        <input type="color" name="color" value="#2b2d31" class="w-full h-10 bg-slate-950 border border-slate-700 rounded px-1 py-1 cursor-pointer">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Button Label</label>
+                        <input type="text" name="btnLabel" value="Open Ticket" class="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 focus:outline-none focus:border-indigo-500">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium mb-1">Button Emoji</label>
+                    <input type="text" name="btnEmoji" value="📩" class="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 focus:outline-none focus:border-indigo-500" placeholder="e.g. 📩 or :smile:">
+                </div>
+
+                <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded transition duration-200">
+                    🚀 Send Panel
+                </button>
+            </form>
+        </div>
+
+    </main>
+
+    <script>
+        const guildSelect = document.getElementById('guildSelect');
+        const channelSelect = document.getElementById('channelSelect');
+
+        guildSelect.addEventListener('change', async () => {
+            const guildId = guildSelect.value;
+            
+            // Reset channels
+            channelSelect.innerHTML = '<option value="">-- Loading Channels... --</option>';
+            channelSelect.disabled = true;
+
+            if (!guildId) {
+                channelSelect.innerHTML = '<option value="">-- First Select Server --</option>';
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/guilds/${guildId}/channels`);
+                const channels = await response.json();
+
+                channelSelect.innerHTML = '<option value="">-- Select Channel --</option>';
+                channels.forEach(c => {
+                    const opt = document.createElement('option');
+                    opt.value = c.id;
+                    opt.textContent = '#' + c.name;
+                    channelSelect.appendChild(opt);
+                });
+                channelSelect.disabled = false;
+            } catch (error) {
+                console.error('Error fetching channels:', error);
+                channelSelect.innerHTML = '<option value="">-- Error Loading Channels --</option>';
+            }
+        });
+    </script>
+</body>
+</html>
