@@ -464,6 +464,42 @@ async function startWeb(client) {
         res.redirect('/settings?guild=' + targetGuildId + '&success=saved');
     });
 
+    app.post('/api/delete-category', requireAuth, async (req, res) => {
+        const { categoryId, guildId } = req.body;
+        // Permission check...
+        
+        try {
+            await prisma.ticketCategory.delete({ where: { id: categoryId } });
+            res.sendStatus(200);
+        } catch (error) {
+            console.error('Delete Category Error:', error);
+            res.sendStatus(500);
+        }
+    });
+
+    app.post('/api/create-category-settings', requireAuth, async (req, res) => {
+        const { name, emoji, guildId } = req.body;
+        
+        try {
+            let config = await prisma.guildConfig.findFirst({ where: { guildId } });
+            if (!config) {
+                config = await prisma.guildConfig.create({ data: { guildId, id: 'config' } });
+            }
+
+            await prisma.ticketCategory.create({
+                data: {
+                    configId: config.id,
+                    name,
+                    emoji
+                }
+            });
+            res.sendStatus(200);
+        } catch (error) {
+            console.error('Create Category Error:', error);
+            res.sendStatus(500);
+        }
+    });
+
     app.get('/logout', (req, res) => {
         req.session.destroy();
         res.redirect('/');
