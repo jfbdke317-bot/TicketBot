@@ -1,22 +1,31 @@
-
 const prisma = require('../utils/prisma');
+const discordTranscripts = require('discord-html-transcripts');
 
 async function closeTicket(interaction, ticket, config) {
     if (!interaction.replied && !interaction.deferred) await interaction.reply({ content: '🔒 Closing ticket...', ephemeral: true });
     else await interaction.followUp({ content: '🔒 Closing ticket...', ephemeral: true });
 
-    const { EmbedBuilder } = require('discord.js'); // Re-import to ensure scope
+    const { EmbedBuilder } = require('discord.js');
 
-    // Generate Transcript
-    const messages = await interaction.channel.messages.fetch({ limit: 100 });
-    const transcript = messages.reverse().map(m => `[${m.createdAt.toLocaleString()}] ${m.author.tag}: ${m.content}`).join('\n');
+    // Generate HTML Transcript
+    const attachment = await discordTranscripts.createTranscript(interaction.channel, {
+        limit: -1, // Export all messages
+        returnType: 'attachment', // Return attachment builder
+        filename: `transcript-${ticket.channelId}.html`,
+        saveImages: true,
+        footerText: "Exported {number} message{s}", 
+        poweredBy: false
+    });
     
+    // Convert attachment buffer to string for DB storage
+    const transcriptString = attachment.attachment.toString('utf-8');
+
     await prisma.ticket.update({
         where: { id: ticket.id },
         data: { 
             status: 'CLOSED', 
             closedAt: new Date(), 
-            transcript: transcript,
+            transcript: transcriptString, // Save HTML string to DB
             closedBy: interaction.user.id
         }
     });
@@ -36,7 +45,8 @@ async function closeTicket(interaction, ticket, config) {
                     .setColor('#ff0000')
                     .setTimestamp();
                     
-                await logChannel.send({ embeds: [logEmbed] });
+                // Send file attachment to log channel too
+                await logChannel.send({ embeds: [logEmbed], files: [attachment] });
             }
         } catch (err) {
             console.error('Failed to send transcript log:', err);
