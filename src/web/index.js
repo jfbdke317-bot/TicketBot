@@ -38,8 +38,11 @@ async function startWeb(client) {
         
         const redirectUri = encodeURIComponent(`${PUBLIC_URL}/auth/callback`);
         const loginUrl = `https://discord.com/oauth2/authorize?client_id=${process.env.DISCORD_CLIENT_ID}&response_type=code&redirect_uri=${redirectUri}&scope=identify+guilds`;
+        
+        // OAuth2 URL for inviting the bot (Admin permissions)
+        const inviteUrl = `https://discord.com/oauth2/authorize?client_id=${process.env.DISCORD_CLIENT_ID}&permissions=8&scope=bot%20applications.commands`;
 
-        res.render('login', { loginUrl });
+        res.render('login', { loginUrl, inviteUrl });
     });
 
     app.get('/auth/callback', async (req, res) => {
@@ -89,6 +92,9 @@ async function startWeb(client) {
     app.get('/dashboard', requireAuth, async (req, res) => {
         const userId = req.session.user.id;
         
+        // Invite Link (Same as login page)
+        const inviteUrl = `https://discord.com/oauth2/authorize?client_id=${process.env.DISCORD_CLIENT_ID}&permissions=8&scope=bot%20applications.commands`;
+
         // Fetch tickets and stats
         const tickets = await prisma.ticket.findMany({
             orderBy: { createdAt: 'desc' },
@@ -146,6 +152,7 @@ async function startWeb(client) {
             tickets,
             stats,
             config: config || {},
+            inviteUrl,
             guildName,
             guildChannels,
             guildCategories,
@@ -154,6 +161,9 @@ async function startWeb(client) {
     });
 
     app.get('/deploy', requireAuth, async (req, res) => {
+        // Invite Link
+        const inviteUrl = `https://discord.com/oauth2/authorize?client_id=${process.env.DISCORD_CLIENT_ID}&permissions=8&scope=bot%20applications.commands`;
+
         // Find mutual guilds where user has ManageGuild permission
         const guilds = [];
         try {
@@ -185,7 +195,8 @@ async function startWeb(client) {
 
         res.render('deploy', {
             user: req.session.user,
-            guilds
+            guilds,
+            inviteUrl
         });
     });
 
