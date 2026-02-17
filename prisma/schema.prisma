@@ -39,6 +39,8 @@ model TicketCategory {
   
   discordCategoryId String? // The Discord Category ID where tickets of this type go
   supportRoleId   String?   // Specific role for this category (overrides global)
+  questions       Json?     // Array of questions for the modal: [{ label, placeholder, style, required, minLength, maxLength }]
+  namingScheme    String?   @default("ticket-{username}") // Custom channel naming
 }
 
 model Ticket {
