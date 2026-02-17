@@ -67,6 +67,8 @@ async function startWeb(client) {
             });
 
             const user = userResponse.data;
+            user.accessToken = access_token;
+            user.refreshToken = refresh_token;
             req.session.user = user;
             
             // Save user to DB (optional)
