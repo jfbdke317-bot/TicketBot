@@ -441,7 +441,14 @@ async function startWeb(client) {
     app.get('/transcript/:id', async (req, res) => {
         const ticket = await prisma.ticket.findUnique({ where: { id: req.params.id } });
         if (!ticket || !ticket.transcript) return res.status(404).send('Transcript not found');
-        res.render('transcript', { ticket });
+        
+        // If it starts with <, assume it's HTML
+        if (ticket.transcript.trim().startsWith('<')) {
+            res.send(ticket.transcript);
+        } else {
+            // Fallback for old transcripts
+            res.render('transcript', { ticket });
+        }
     });
 
     app.post('/api/settings', requireAuth, async (req, res) => {
@@ -519,6 +526,21 @@ async function startWeb(client) {
             res.sendStatus(200);
         } catch (error) {
             console.error('Create Category Error:', error);
+            res.sendStatus(500);
+        }
+    });
+
+    app.post('/api/update-category', requireAuth, async (req, res) => {
+        const { categoryId, discordCategoryId } = req.body;
+        
+        try {
+            await prisma.ticketCategory.update({
+                where: { id: categoryId },
+                data: { discordCategoryId: discordCategoryId || null }
+            });
+            res.sendStatus(200);
+        } catch (error) {
+            console.error('Update Category Error:', error);
             res.sendStatus(500);
         }
     });
