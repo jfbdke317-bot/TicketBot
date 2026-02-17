@@ -375,50 +375,55 @@ async function handleModal(interaction) {
             }
         });
 
-        // Send Panel Update
-        const targetChannel = interaction.guild.channels.cache.get(targetChannelId);
-        if (targetChannel) {
-            // Fetch all categories
-            const allCats = await prisma.ticketCategory.findMany({ where: { configId: config.id } });
-            
-            const embed = new EmbedBuilder()
-                .setTitle('🎫 Support Tickets')
-                .setDescription('Select a category below to open a ticket.')
-                .setColor('#2b2d31');
+            // Send Panel Update
+            const targetChannel = interaction.guild.channels.cache.get(targetChannelId);
+            if (targetChannel) {
+                // Fetch all categories
+                const allCats = await prisma.ticketCategory.findMany({ where: { configId: config.id } });
+                
+                const embed = new EmbedBuilder()
+                    .setTitle('🎫 Support Tickets')
+                    .setDescription('Select a category below to open a ticket.')
+                    .setColor('#2b2d31');
 
-            const row = new ActionRowBuilder();
-            allCats.forEach(cat => {
-                row.addComponents(
-                    new ButtonBuilder()
-                        .setCustomId(`open_cat_${cat.id}`)
-                        .setLabel(cat.name)
-                        .setEmoji(cat.emoji)
-                        .setStyle(ButtonStyle.Primary)
-                );
-            });
+                // Split categories into chunks of 5 (Discord ActionRow Limit)
+                const rows = [];
+                for (let i = 0; i < allCats.length; i += 5) {
+                    const chunk = allCats.slice(i, i + 5);
+                    const row = new ActionRowBuilder();
+                    chunk.forEach(cat => {
+                        row.addComponents(
+                            new ButtonBuilder()
+                                .setCustomId(`open_cat_${cat.id}`)
+                                .setLabel(cat.name.slice(0, 80))
+                                .setEmoji(cat.emoji || '📩')
+                                .setStyle(ButtonStyle.Primary)
+                        );
+                    });
+                    rows.push(row);
+                }
 
-            // If no categories exist yet, don't send/edit yet or send a placeholder?
-            // Actually, we should try to edit the existing message if possible, or send new.
-            // For simplicity, let's just delete the last bot message in that channel if it was a panel? 
-            // Or just append. A clean way is difficult without storing messageID.
-            // Let's just send a new one for now, user can delete old ones.
-            
-            await targetChannel.send({ embeds: [embed], components: [row] });
-            
-            // Ask if they want to add another
-            await interaction.reply({ 
-                content: `✅ Added category **${name}**!\nDo you want to add another one?`, 
-                components: [
-                    new ActionRowBuilder().addComponents(
-                        new ButtonBuilder().setCustomId(`setup_add_cat_${targetChannelId}`).setLabel('Add Another Category').setStyle(ButtonStyle.Success),
-                        new ButtonBuilder().setCustomId(`setup_finish_${targetChannelId}`).setLabel('Finish Setup').setStyle(ButtonStyle.Secondary)
-                    )
-                ],
-                ephemeral: true 
-            });
+                // If more than 5 rows (25 buttons), we can't show all. Limit to 5 rows max (25 cats)
+                if (rows.length > 5) {
+                    rows.length = 5; 
+                }
+
+                await targetChannel.send({ embeds: [embed], components: rows });
+                
+                // Ask if they want to add another
+                await interaction.reply({ 
+                    content: `✅ Added category **${name}**!\nDo you want to add another one?`, 
+                    components: [
+                        new ActionRowBuilder().addComponents(
+                            new ButtonBuilder().setCustomId(`setup_add_cat_${targetChannelId}`).setLabel('Add Another Category').setStyle(ButtonStyle.Success),
+                            new ButtonBuilder().setCustomId(`setup_finish_${targetChannelId}`).setLabel('Finish Setup').setStyle(ButtonStyle.Secondary)
+                        )
+                    ],
+                    ephemeral: true 
+                });
+            }
+            return;
         }
-        return;
-    }
 
     if (interaction.customId.startsWith('ticket_modal_') || interaction.customId === 'ticket_modal') {
         await interaction.deferReply({ ephemeral: true });
