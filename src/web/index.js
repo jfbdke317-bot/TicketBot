@@ -405,8 +405,22 @@ async function startWeb(client) {
         res.json(channels);
     });
 
+    app.get('/api/guilds/:id/categories', requireAuth, async (req, res) => {
+        const guildId = req.params.id;
+        try {
+            const config = await prisma.guildConfig.findFirst({ 
+                where: { guildId },
+                include: { categories: true }
+            });
+            res.json(config ? config.categories : []);
+        } catch (error) {
+            console.error('Error fetching categories:', error);
+            res.status(500).json({ error: 'Failed to fetch categories' });
+        }
+    });
+
     app.post('/api/deploy-panel', requireAuth, async (req, res) => {
-        const { guildId, channelId, title, description, color, btnLabel, btnEmoji } = req.body;
+        const { guildId, channelId, title, description, color, btnLabel, btnEmoji, panelType, selectedCategories } = req.body;
         
         const guild = client.guilds.cache.get(guildId);
         if (!guild) return res.status(404).send('Guild not found');
@@ -422,17 +436,67 @@ async function startWeb(client) {
             .setColor(color || '#2b2d31')
             .setFooter({ text: 'Powered by TicketBot' });
 
-        const row = new ActionRowBuilder()
-            .addComponents(
-                new ButtonBuilder()
-                    .setCustomId('open_ticket')
-                    .setLabel(btnLabel || 'Open Ticket')
-                    .setStyle(ButtonStyle.Primary)
-                    .setEmoji(btnEmoji || '📩')
-            );
+        const components = [];
+
+        if (panelType === 'categories') {
+            // Fetch selected categories
+            let categories = [];
+            try {
+                // If selectedCategories is an array, fetch them. If string (one selected), wrap in array.
+                const catIds = Array.isArray(selectedCategories) ? selectedCategories : (selectedCategories ? [selectedCategories] : []);
+                
+                if (catIds.length > 0) {
+                    categories = await prisma.ticketCategory.findMany({
+                        where: { id: { in: catIds } }
+                    });
+                } else {
+                    // If none selected but mode is categories, maybe fetch all? 
+                    // Let's assume user must select at least one, or we fetch all if 'all' was passed (not implemented yet)
+                    // For now, if empty, we might fall back or error.
+                    // Let's fallback to all if none selected to be safe?
+                    const config = await prisma.guildConfig.findFirst({ where: { guildId } });
+                    if (config) {
+                        categories = await prisma.ticketCategory.findMany({ where: { configId: config.id } });
+                    }
+                }
+            } catch (err) {
+                console.error('Error fetching categories for panel:', err);
+            }
+
+            // Build rows
+            const rows = [];
+            for (let i = 0; i < categories.length; i += 5) {
+                const chunk = categories.slice(i, i + 5);
+                const row = new ActionRowBuilder();
+                chunk.forEach(cat => {
+                    row.addComponents(
+                        new ButtonBuilder()
+                            .setCustomId(`open_cat_${cat.id}`)
+                            .setLabel(cat.name.slice(0, 80))
+                            .setEmoji(cat.emoji || '📩')
+                            .setStyle(ButtonStyle.Primary)
+                    );
+                });
+                rows.push(row);
+            }
+            if (rows.length > 5) rows.length = 5;
+            rows.forEach(r => components.push(r));
+
+        } else {
+            // Default Single Button
+            const row = new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder()
+                        .setCustomId('open_ticket')
+                        .setLabel(btnLabel || 'Open Ticket')
+                        .setStyle(ButtonStyle.Primary)
+                        .setEmoji(btnEmoji || '📩')
+                );
+            components.push(row);
+        }
 
         try {
-            await channel.send({ embeds: [embed], components: [row] });
+            await channel.send({ embeds: [embed], components: components });
             res.redirect('/deploy?success=true');
         } catch (error) {
             console.error('Deploy error:', error);
