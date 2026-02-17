@@ -23,13 +23,13 @@ const client = new Client({
     try {
         console.log('🚀 Starting TicketBot System...');
         
+        // Start Web Dashboard (Independent of Bot Login)
+        startWeb(client).catch(err => console.error('❌ Web Startup Error:', err));
+
         // Start Bot
-        await startBot(client);
-        
-        // Start Web Dashboard
-        await startWeb(client);
+        await startBot(client).catch(err => console.error('❌ Bot Startup Error:', err));
 
     } catch (error) {
-        console.error('❌ Startup Error:', error);
+        console.error('❌ Critical Startup Error:', error);
     }
 })();
