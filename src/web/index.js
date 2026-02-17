@@ -109,37 +109,70 @@ async function startWeb(client) {
 
         const config = await prisma.guildConfig.findFirst();
 
-        // Fetch Guild Info for Settings
+        // --- Fetch Guilds Logic ---
+        // Instead of relying on a single 'config.guildId', let's find all mutual guilds
+        // where the user has Admin/ManageGuild permissions.
+        let availableGuilds = [];
+        let selectedGuild = null;
+
+        try {
+            // 1. Get User's Guilds
+            const userGuildsResponse = await axios.get(`${DISCORD_API}/users/@me/guilds`, {
+                headers: { Authorization: `Bearer ${req.session.user.accessToken}` }
+            });
+
+            // 2. Filter for mutual guilds with permissions
+            for (const g of userGuildsResponse.data) {
+                const guild = client.guilds.cache.get(g.id);
+                if (guild) {
+                    const permissions = BigInt(g.permissions);
+                    const MANAGE_GUILD = 0x20n;
+                    const ADMINISTRATOR = 0x8n;
+                    const hasPerms = (permissions & MANAGE_GUILD) === MANAGE_GUILD || (permissions & ADMINISTRATOR) === ADMINISTRATOR;
+                    
+                    if (hasPerms) {
+                        availableGuilds.push({ id: g.id, name: g.name, icon: g.icon });
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Error fetching user guilds:', error.message);
+        }
+
+        // 3. Determine which guild to show
+        // If query param ?guild=... is present, try to select that one
+        // Else if config exists, try that one
+        // Else default to first available
+        let targetGuildId = req.query.guild || (config ? config.guildId : null);
+        
+        // Validate that the bot is actually in this guild and user has access
+        if (targetGuildId) {
+             const found = availableGuilds.find(g => g.id === targetGuildId);
+             if (found) {
+                 selectedGuild = client.guilds.cache.get(targetGuildId);
+             }
+        }
+
+        // Fallback if no valid selection
+        if (!selectedGuild && availableGuilds.length > 0) {
+            selectedGuild = client.guilds.cache.get(availableGuilds[0].id);
+        }
+
+        // Fetch Guild Info for Settings (Channels/Roles)
         let guildChannels = [];
         let guildCategories = [];
         let guildRoles = [];
-        let guildName = 'Unknown Server';
+        let guildName = 'No Server Found';
 
-        if (config && config.guildId) {
-            const guild = client.guilds.cache.get(config.guildId);
-            if (guild) {
-                guildName = guild.name;
-                guild.channels.cache.forEach(c => {
-                    if (c.type === 0) guildChannels.push({ id: c.id, name: c.name }); // Text
-                    if (c.type === 4) guildCategories.push({ id: c.id, name: c.name }); // Category
-                });
-                guild.roles.cache.forEach(r => {
-                    if (r.name !== '@everyone') guildRoles.push({ id: r.id, name: r.name });
-                });
-            }
-        } else {
-             // Fallback: Use the first guild the bot is in (for initial setup)
-             const firstGuild = client.guilds.cache.first();
-             if (firstGuild) {
-                 guildName = firstGuild.name;
-                 firstGuild.channels.cache.forEach(c => {
-                    if (c.type === 0) guildChannels.push({ id: c.id, name: c.name });
-                    if (c.type === 4) guildCategories.push({ id: c.id, name: c.name });
-                 });
-                 firstGuild.roles.cache.forEach(r => {
-                    if (r.name !== '@everyone') guildRoles.push({ id: r.id, name: r.name });
-                });
-             }
+        if (selectedGuild) {
+            guildName = selectedGuild.name;
+            selectedGuild.channels.cache.forEach(c => {
+                if (c.type === 0) guildChannels.push({ id: c.id, name: c.name }); // Text
+                if (c.type === 4) guildCategories.push({ id: c.id, name: c.name }); // Category
+            });
+            selectedGuild.roles.cache.forEach(r => {
+                if (r.name !== '@everyone') guildRoles.push({ id: r.id, name: r.name });
+            });
         }
 
         // Sort alphabetically
@@ -156,7 +189,9 @@ async function startWeb(client) {
             guildName,
             guildChannels,
             guildCategories,
-            guildRoles
+            guildRoles,
+            availableGuilds,     // Pass list of servers to frontend
+            selectedGuildId: selectedGuild ? selectedGuild.id : null
         });
     });
 
