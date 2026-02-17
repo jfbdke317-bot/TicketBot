@@ -92,7 +92,7 @@ async function startWeb(client) {
     app.get('/dashboard', requireAuth, async (req, res) => {
         const userId = req.session.user.id;
         
-        // Invite Link (Same as login page)
+        // Invite Link
         const inviteUrl = `https://discord.com/oauth2/authorize?client_id=${process.env.DISCORD_CLIENT_ID}&permissions=8&scope=bot%20applications.commands`;
 
         // Fetch tickets and stats
@@ -110,8 +110,6 @@ async function startWeb(client) {
         const config = await prisma.guildConfig.findFirst();
 
         // --- Fetch Guilds Logic ---
-        // Instead of relying on a single 'config.guildId', let's find all mutual guilds
-        // where the user has Admin/ManageGuild permissions.
         let availableGuilds = [];
         let selectedGuild = null;
 
@@ -140,12 +138,8 @@ async function startWeb(client) {
         }
 
         // 3. Determine which guild to show
-        // If query param ?guild=... is present, try to select that one
-        // Else if config exists, try that one
-        // Else default to first available
         let targetGuildId = req.query.guild || (config ? config.guildId : null);
         
-        // Validate that the bot is actually in this guild and user has access
         if (targetGuildId) {
              const found = availableGuilds.find(g => g.id === targetGuildId);
              if (found) {
@@ -195,6 +189,114 @@ async function startWeb(client) {
         });
     });
 
+    app.get('/settings', requireAuth, async (req, res) => {
+        // Invite Link
+        const inviteUrl = `https://discord.com/oauth2/authorize?client_id=${process.env.DISCORD_CLIENT_ID}&permissions=8&scope=bot%20applications.commands`;
+
+        // Similar Guild Fetching Logic as Dashboard (Refactor into a helper function later)
+        let availableGuilds = [];
+        let selectedGuild = null;
+
+        try {
+            const userGuildsResponse = await axios.get(`${DISCORD_API}/users/@me/guilds`, {
+                headers: { Authorization: `Bearer ${req.session.user.accessToken}` }
+            });
+
+            for (const g of userGuildsResponse.data) {
+                const guild = client.guilds.cache.get(g.id);
+                if (guild) {
+                    const permissions = BigInt(g.permissions);
+                    const MANAGE_GUILD = 0x20n;
+                    const ADMINISTRATOR = 0x8n;
+                    const hasPerms = (permissions & MANAGE_GUILD) === MANAGE_GUILD || (permissions & ADMINISTRATOR) === ADMINISTRATOR;
+                    
+                    if (hasPerms) {
+                        availableGuilds.push({ id: g.id, name: g.name, icon: g.icon });
+                    }
+                }
+            }
+        } catch (error) { console.error(error); }
+
+        const config = await prisma.guildConfig.findFirst();
+        let targetGuildId = req.query.guild || (config ? config.guildId : null);
+        
+        if (targetGuildId) {
+             const found = availableGuilds.find(g => g.id === targetGuildId);
+             if (found) {
+                 selectedGuild = client.guilds.cache.get(targetGuildId);
+             }
+        }
+        if (!selectedGuild && availableGuilds.length > 0) {
+            selectedGuild = client.guilds.cache.get(availableGuilds[0].id);
+        }
+
+        let guildChannels = [];
+        let guildCategories = [];
+        let guildRoles = [];
+        
+        if (selectedGuild) {
+            selectedGuild.channels.cache.forEach(c => {
+                if (c.type === 0) guildChannels.push({ id: c.id, name: c.name });
+                if (c.type === 4) guildCategories.push({ id: c.id, name: c.name });
+            });
+            selectedGuild.roles.cache.forEach(r => {
+                if (r.name !== '@everyone') guildRoles.push({ id: r.id, name: r.name });
+            });
+        }
+        
+        guildChannels.sort((a, b) => a.name.localeCompare(b.name));
+        guildCategories.sort((a, b) => a.name.localeCompare(b.name));
+        guildRoles.sort((a, b) => a.name.localeCompare(b.name));
+
+        res.render('settings', {
+            user: req.session.user,
+            config: config || {},
+            inviteUrl,
+            availableGuilds,
+            selectedGuildId: selectedGuild ? selectedGuild.id : null,
+            guildChannels,
+            guildCategories,
+            guildRoles
+        });
+    });
+
+    app.get('/tickets', requireAuth, async (req, res) => {
+        const inviteUrl = `https://discord.com/oauth2/authorize?client_id=${process.env.DISCORD_CLIENT_ID}&permissions=8&scope=bot%20applications.commands`;
+        
+        // Pagination & Filtering
+        const page = parseInt(req.query.page) || 1;
+        const limit = 25;
+        const statusFilter = req.query.status || undefined;
+        const search = req.query.search || undefined;
+
+        const where = {};
+        if (statusFilter) where.status = statusFilter;
+        if (search) where.OR = [
+            { id: { contains: search } },
+            { channelId: { contains: search } },
+            { openerId: { contains: search } }
+        ];
+
+        const tickets = await prisma.ticket.findMany({
+            where,
+            orderBy: { createdAt: 'desc' },
+            skip: (page - 1) * limit,
+            take: limit
+        });
+
+        const totalTickets = await prisma.ticket.count({ where });
+
+        res.render('tickets', {
+            user: req.session.user,
+            tickets,
+            inviteUrl,
+            currentPage: page,
+            totalPages: Math.ceil(totalTickets / limit),
+            statusFilter,
+            search
+        });
+    });
+
     app.get('/deploy', requireAuth, async (req, res) => {
         // Invite Link
         const inviteUrl = `https://discord.com/oauth2/authorize?client_id=${process.env.DISCORD_CLIENT_ID}&permissions=8&scope=bot%20applications.commands`;
@@ -233,6 +335,45 @@ async function startWeb(client) {
             guilds,
             inviteUrl
         });
+    });
+
+    // --- New API Endpoints for Channel/Category Creation ---
+
+    app.post('/api/create-category', requireAuth, async (req, res) => {
+        const { guildId, name } = req.body;
+        const guild = client.guilds.cache.get(guildId);
+        if (!guild) return res.status(404).send('Guild not found');
+        
+        try {
+            const { ChannelType } = require('discord.js');
+            await guild.channels.create({
+                name: name,
+                type: ChannelType.GuildCategory
+            });
+            res.redirect(`/dashboard?guild=${guildId}&success=category_created`);
+        } catch (error) {
+            console.error('Create Category Error:', error);
+            res.redirect(`/dashboard?guild=${guildId}&error=failed_create`);
+        }
+    });
+
+    app.post('/api/create-channel', requireAuth, async (req, res) => {
+        const { guildId, name, parentId } = req.body;
+        const guild = client.guilds.cache.get(guildId);
+        if (!guild) return res.status(404).send('Guild not found');
+        
+        try {
+            const { ChannelType } = require('discord.js');
+            await guild.channels.create({
+                name: name,
+                type: ChannelType.GuildText,
+                parent: parentId || null
+            });
+            res.redirect(`/dashboard?guild=${guildId}&success=channel_created`);
+        } catch (error) {
+            console.error('Create Channel Error:', error);
+            res.redirect(`/dashboard?guild=${guildId}&error=failed_create`);
+        }
     });
 
     app.get('/api/guilds/:id/channels', requireAuth, async (req, res) => {
@@ -289,7 +430,7 @@ async function startWeb(client) {
     });
 
     app.post('/api/settings', requireAuth, async (req, res) => {
-        const { categoryId, roleId, welcomeMsg, transcriptChannelId, guildId } = req.body;
+        const { categoryId, roleId, welcomeMsg, transcriptChannelId, guildId, maxTickets, autoCloseHours } = req.body;
         
         // Basic permission check (allow any logged in user for demo, restrict to owner in prod)
         // Ideally check against client.guilds.cache.get(guildId).members...
@@ -304,7 +445,9 @@ async function startWeb(client) {
                 ticketCategoryId: categoryId,
                 transcriptChannelId: transcriptChannelId,
                 supportRoleId: roleId,
-                welcomeMessage: welcomeMsg
+                welcomeMessage: welcomeMsg,
+                maxTickets: parseInt(maxTickets) || 1,
+                autoCloseHours: parseInt(autoCloseHours) || 24
             },
             create: {
                 id: 'config',
@@ -312,11 +455,13 @@ async function startWeb(client) {
                 ticketCategoryId: categoryId,
                 transcriptChannelId: transcriptChannelId,
                 supportRoleId: roleId,
-                welcomeMessage: welcomeMsg
+                welcomeMessage: welcomeMsg,
+                maxTickets: parseInt(maxTickets) || 1,
+                autoCloseHours: parseInt(autoCloseHours) || 24
             }
         });
         
-        res.redirect('/dashboard?success=saved');
+        res.redirect('/settings?guild=' + targetGuildId + '&success=saved');
     });
 
     app.get('/logout', (req, res) => {
