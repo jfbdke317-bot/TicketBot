@@ -41,6 +41,29 @@
                     </select>
                 </div>
 
+                <!-- Panel Type Selection -->
+                <div>
+                    <label class="block text-sm font-medium mb-1">3. Panel Type</label>
+                    <div class="flex gap-4">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="radio" name="panelType" value="default" checked onchange="togglePanelType()" class="accent-indigo-500">
+                            <span>Single Button (Default)</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="radio" name="panelType" value="categories" onchange="togglePanelType()" class="accent-indigo-500">
+                            <span>Category Buttons</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Category Selection (Hidden by default) -->
+                <div id="categorySelection" class="hidden p-4 bg-slate-900/50 rounded border border-slate-700">
+                    <label class="block text-sm font-medium mb-2">Select Categories to Include</label>
+                    <div id="categoriesList" class="space-y-2 max-h-48 overflow-y-auto">
+                        <p class="text-xs text-slate-500 italic">Select a server to load categories...</p>
+                    </div>
+                </div>
+
                 <hr class="border-slate-700">
 
                 <!-- Embed Configuration -->
@@ -81,22 +104,36 @@
     <script>
         const guildSelect = document.getElementById('guildSelect');
         const channelSelect = document.getElementById('channelSelect');
+        const categoriesList = document.getElementById('categoriesList');
+        const categorySelection = document.getElementById('categorySelection');
+        
+        function togglePanelType() {
+            const type = document.querySelector('input[name="panelType"]:checked').value;
+            if (type === 'categories') {
+                categorySelection.classList.remove('hidden');
+            } else {
+                categorySelection.classList.add('hidden');
+            }
+        }
 
         guildSelect.addEventListener('change', async () => {
             const guildId = guildSelect.value;
             
-            // Reset channels
+            // Reset channels & categories
             channelSelect.innerHTML = '<option value="">-- Loading Channels... --</option>';
             channelSelect.disabled = true;
+            categoriesList.innerHTML = '<p class="text-xs text-slate-500 italic">Loading categories...</p>';
 
             if (!guildId) {
                 channelSelect.innerHTML = '<option value="">-- First Select Server --</option>';
+                categoriesList.innerHTML = '<p class="text-xs text-slate-500 italic">Select a server to load categories...</p>';
                 return;
             }
 
             try {
-                const response = await fetch(`/api/guilds/${guildId}/channels`);
-                const channels = await response.json();
+                // Fetch Channels
+                const channelRes = await fetch(`/api/guilds/${guildId}/channels`);
+                const channels = await channelRes.json();
 
                 channelSelect.innerHTML = '<option value="">-- Select Channel --</option>';
                 channels.forEach(c => {
@@ -106,9 +143,31 @@
                     channelSelect.appendChild(opt);
                 });
                 channelSelect.disabled = false;
+
+                // Fetch Categories
+                const catRes = await fetch(`/api/guilds/${guildId}/categories`);
+                const categories = await catRes.json();
+                
+                if (categories.length > 0) {
+                    categoriesList.innerHTML = '';
+                    categories.forEach(cat => {
+                        const div = document.createElement('div');
+                        div.className = 'flex items-center gap-2';
+                        div.innerHTML = `
+                            <input type="checkbox" name="selectedCategories" value="${cat.id}" checked class="accent-indigo-500 w-4 h-4">
+                            <span class="text-xl">${cat.emoji}</span>
+                            <span>${cat.name}</span>
+                        `;
+                        categoriesList.appendChild(div);
+                    });
+                } else {
+                    categoriesList.innerHTML = '<p class="text-xs text-yellow-500">No categories found. Create some in Settings first.</p>';
+                }
+
             } catch (error) {
-                console.error('Error fetching channels:', error);
+                console.error('Error fetching data:', error);
                 channelSelect.innerHTML = '<option value="">-- Error Loading Channels --</option>';
+                categoriesList.innerHTML = '<p class="text-xs text-red-500">Error loading categories.</p>';
             }
         });
     </script>
