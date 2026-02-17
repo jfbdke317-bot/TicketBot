@@ -12,7 +12,7 @@
 </head>
 <body class="flex h-screen overflow-hidden">
     
-    <%- include('partials/sidebar', { path: '/settings', user: user, inviteUrl: inviteUrl }) %>
+    <%- include('partials/sidebar', { path: '/settings', user: user, inviteUrl: inviteUrl, selectedGuildId: selectedGuildId }) %>
 
     <!-- Main Content -->
     <main class="flex-1 overflow-y-auto p-8">
@@ -58,17 +58,20 @@
                     <div class="space-y-3 mb-4">
                         <% if (config.categories && config.categories.length > 0) { %>
                             <% config.categories.forEach(cat => { %>
-                                <div class="flex items-center justify-between bg-slate-950 p-3 rounded border border-slate-700">
-                                    <div class="flex items-center gap-3">
-                                        <span class="text-2xl"><%= cat.emoji %></span>
-                                        <div>
-                                            <p class="font-bold"><%= cat.name %></p>
-                                            <p class="text-xs text-slate-500">ID: <%= cat.id %></p>
+                                <div class="bg-slate-950 p-3 rounded border border-slate-700 mb-2">
+                                    <div class="flex items-center justify-between mb-2">
+                                        <div class="flex items-center gap-3">
+                                            <span class="text-2xl"><%= cat.emoji %></span>
+                                            <span class="font-bold"><%= cat.name %></span>
                                         </div>
+                                        <button type="button" onclick="deleteCategory('<%= cat.id %>')" class="text-red-400 hover:text-red-300 p-2">
+                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                                        </button>
                                     </div>
-                                    <button type="button" onclick="deleteCategory('<%= cat.id %>')" class="text-red-400 hover:text-red-300 p-2">
-                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-                                    </button>
+                                    <div class="flex gap-2 items-center">
+                                        <input type="text" id="cat_discord_id_<%= cat.id %>" value="<%= cat.discordCategoryId || '' %>" placeholder="Discord Category ID (Right-click Folder > Copy ID)" class="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs w-full text-slate-300">
+                                        <button type="button" onclick="updateCategory('<%= cat.id %>')" class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1 rounded font-bold">Save</button>
+                                    </div>
                                 </div>
                             <% }) %>
                         <% } else { %>
@@ -154,6 +157,30 @@
                 if (res.ok) window.location.reload();
                 else alert('Failed to delete category');
             } catch (e) { console.error(e); alert('Error deleting category'); }
+        }
+
+        async function updateCategory(catId) {
+            const discordCategoryId = document.getElementById(`cat_discord_id_${catId}`).value;
+            const btn = document.activeElement;
+            try {
+                const res = await fetch('/api/update-category', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ categoryId: catId, discordCategoryId, guildId: '<%= selectedGuildId %>' })
+                });
+                if (res.ok) {
+                    // Show small success indicator instead of reload
+                    const originalText = btn.innerText;
+                    btn.innerText = 'Saved!';
+                    btn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+                    btn.classList.add('bg-green-600', 'hover:bg-green-700');
+                    setTimeout(() => {
+                        btn.innerText = 'Save';
+                        btn.classList.remove('bg-green-600', 'hover:bg-green-700');
+                        btn.classList.add('bg-blue-600', 'hover:bg-blue-700');
+                    }, 2000);
+                } else alert('Failed to update category');
+            } catch (e) { console.error(e); alert('Error updating category'); }
         }
 
         async function createCategory() {

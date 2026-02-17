@@ -12,13 +12,27 @@
 </head>
 <body class="flex h-screen overflow-hidden">
     
-    <%- include('partials/sidebar', { path: '/tickets', user: user, inviteUrl: inviteUrl }) %>
+    <%- include('partials/sidebar', { path: '/tickets', user: user, inviteUrl: inviteUrl, selectedGuildId: selectedGuildId }) %>
 
     <!-- Main Content -->
     <main class="flex-1 overflow-y-auto p-8">
         
         <div class="flex justify-between items-center mb-6">
             <h2 class="text-2xl font-bold">Ticket Management</h2>
+
+            <!-- Server Switcher -->
+            <% if (typeof availableGuilds !== 'undefined' && availableGuilds.length > 0) { %>
+            <form action="/tickets" method="GET">
+                <select name="guild" onchange="this.form.submit()" class="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-500">
+                    <% availableGuilds.forEach(g => { %>
+                        <option value="<%= g.id %>" <%= selectedGuildId === g.id ? 'selected' : '' %>><%= g.name %></option>
+                    <% }) %>
+                </select>
+                <!-- Preserve other filters -->
+                <input type="hidden" name="status" value="<%= statusFilter || '' %>">
+                <input type="hidden" name="search" value="<%= search || '' %>">
+            </form>
+            <% } %>
         </div>
 
         <!-- Filter & Search -->

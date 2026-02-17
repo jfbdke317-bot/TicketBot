@@ -12,7 +12,7 @@
 </head>
 <body class="flex h-screen overflow-hidden">
     
-    <%- include('partials/sidebar', { path: '/deploy', user: user, inviteUrl: inviteUrl }) %>
+    <%- include('partials/sidebar', { path: '/deploy', user: user, inviteUrl: inviteUrl, selectedGuildId: selectedGuildId }) %>
 
     <!-- Main Content -->
     <main class="flex-1 overflow-y-auto p-8">
@@ -28,7 +28,7 @@
                     <select id="guildSelect" name="guildId" required class="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 focus:outline-none focus:border-indigo-500">
                         <option value="">-- Choose a Server --</option>
                         <% guilds.forEach(g => { %>
-                            <option value="<%= g.id %>"><%= g.name %></option>
+                            <option value="<%= g.id %>" <%= (typeof selectedGuildId !== 'undefined' && selectedGuildId === g.id) ? 'selected' : '' %>><%= g.name %></option>
                         <% }) %>
                     </select>
                 </div>
@@ -170,6 +170,11 @@
                 categoriesList.innerHTML = '<p class="text-xs text-red-500">Error loading categories.</p>';
             }
         });
+
+        // Trigger change if value is pre-selected
+        if (guildSelect.value) {
+            guildSelect.dispatchEvent(new Event('change'));
+        }
     </script>
 </body>
 </html>
