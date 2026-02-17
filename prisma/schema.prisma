@@ -1,0 +1,46 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model GuildConfig {
+  id              String   @id @default("config") // Singleton config for single guild bot
+  guildId         String?
+  ticketCategoryId String?
+  transcriptChannelId String?
+  supportRoleId   String?
+  adminRoleId     String?
+  welcomeMessage  String?  @default("Support will be with you shortly.")
+  panelMessage    String?  @default("Click the button below to open a ticket.")
+  panelChannelId  String?
+}
+
+model Ticket {
+  id          String   @id @default(uuid())
+  channelId   String   @unique
+  guildId     String
+  openerId    String
+  claimedBy   String?
+  closedBy    String?
+  status      String   @default("OPEN") // OPEN, CLOSED
+  type        String?  // SUPPORT, BILLING, etc.
+  createdAt   DateTime @default(now())
+  closedAt    DateTime?
+  transcript  String?  // HTML Content or Link
+}
+
+model User {
+  id          String   @id // Discord ID
+  username    String?
+  avatar      String?
+  accessToken String?
+  refreshToken String?
+  updatedAt   DateTime @updatedAt
+}
