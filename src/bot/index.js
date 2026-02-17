@@ -207,7 +207,6 @@ async function handleCommand(interaction) {
 }
 
 const { closeTicket } = require('./utils');
-const { StringSelectMenuBuilder } = require('discord.js'); // Import Select Menu
 
 async function handleSelectMenu(interaction) {
     if (interaction.customId === 'setup_select_channel') {
