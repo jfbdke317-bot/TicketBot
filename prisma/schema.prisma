@@ -1,15 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-generator client {
-  provider = "prisma-client-js"
-}
-
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-}
-
 model GuildConfig {
   id              String   @id @default("config") // Singleton config for single guild bot
   guildId         String?
@@ -20,6 +8,8 @@ model GuildConfig {
   welcomeMessage  String?  @default("Support will be with you shortly.")
   panelMessage    String?  @default("Click the button below to open a ticket.")
   panelChannelId  String?
+  maxTickets      Int      @default(1)
+  autoCloseHours  Int      @default(24) // 0 to disable
 }
 
 model Ticket {
@@ -29,11 +19,12 @@ model Ticket {
   openerId    String
   claimedBy   String?
   closedBy    String?
-  status      String   @default("OPEN") // OPEN, CLOSED
+  status      String   @default("OPEN") // OPEN, CLOSED, REQUEST_CLOSE
   type        String?  // SUPPORT, BILLING, etc.
   createdAt   DateTime @default(now())
   closedAt    DateTime?
   transcript  String?  // HTML Content or Link
+  closeRequestAt DateTime?
 }
 
 model User {
@@ -43,4 +34,6 @@ model User {
   accessToken String?
   refreshToken String?
   updatedAt   DateTime @updatedAt
+  isBanned    Boolean  @default(false)
+  banReason   String?
 }
