@@ -12,31 +12,7 @@
 </head>
 <body class="flex h-screen overflow-hidden">
     
-    <!-- Sidebar -->
-    <div class="w-64 bg-slate-900 border-r border-slate-800 flex flex-col">
-        <div class="p-6">
-            <h1 class="text-xl font-bold text-indigo-500">TicketBot</h1>
-        </div>
-        <nav class="flex-1 px-4 space-y-2">
-            <a href="/dashboard" class="block px-4 py-2 rounded bg-indigo-600 text-white">Dashboard</a>
-            <a href="/deploy" class="block px-4 py-2 rounded hover:bg-slate-800 text-slate-300">Deploy Panel</a>
-            <a href="<%= inviteUrl %>" target="_blank" class="block px-4 py-2 rounded hover:bg-slate-800 text-slate-300 flex items-center justify-between">
-                <span>Invite Bot</span>
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
-            </a>
-            <a href="#settings" class="block px-4 py-2 rounded hover:bg-slate-800 text-slate-300">Settings</a>
-            <a href="#tickets" class="block px-4 py-2 rounded hover:bg-slate-800 text-slate-300">Tickets</a>
-        </nav>
-        <div class="p-4 border-t border-slate-800">
-            <div class="flex items-center gap-3">
-                <img src="https://cdn.discordapp.com/avatars/<%= user.id %>/<%= user.avatar %>.png" class="w-8 h-8 rounded-full">
-                <div class="truncate">
-                    <p class="text-sm font-medium"><%= user.username %></p>
-                    <a href="/logout" class="text-xs text-red-400 hover:text-red-300">Logout</a>
-                </div>
-            </div>
-        </div>
-    </div>
+    <%- include('partials/sidebar', { path: '/dashboard', user: user, inviteUrl: inviteUrl }) %>
 
     <!-- Main Content -->
     <main class="flex-1 overflow-y-auto p-8">
@@ -58,66 +34,40 @@
         </div>
 
         <!-- Settings -->
-        <div class="card mb-8" id="settings">
-            <div class="flex justify-between items-center mb-4">
-                <h2 class="text-xl font-bold">Configuration</h2>
-                
-                <!-- Server Switcher -->
-                <% if (availableGuilds && availableGuilds.length > 0) { %>
-                <form action="/dashboard" method="GET">
-                    <select name="guild" onchange="this.form.submit()" class="bg-slate-950 border border-slate-700 rounded px-3 py-1 text-sm focus:outline-none focus:border-indigo-500">
-                        <% availableGuilds.forEach(g => { %>
-                            <option value="<%= g.id %>" <%= selectedGuildId === g.id ? 'selected' : '' %>><%= g.name %></option>
-                        <% }) %>
-                    </select>
-                </form>
-                <% } %>
-            </div>
+        <!-- Removed settings from dashboard to move to separate page -->
 
-            <form action="/api/settings" method="POST" class="space-y-4">
-                <input type="hidden" name="guildId" value="<%= selectedGuildId %>">
+        <!-- Channel Management -->
+        <div class="card mb-8">
+            <h2 class="text-xl font-bold mb-4">Channel Management</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-sm font-medium mb-1">Ticket Category</label>
-                        <select name="categoryId" class="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 focus:outline-none focus:border-indigo-500">
+                <!-- Create Category -->
+                <form action="/api/create-category" method="POST" class="border border-slate-700 p-4 rounded bg-slate-900/50">
+                    <input type="hidden" name="guildId" value="<%= selectedGuildId %>">
+                    <h3 class="font-bold text-sm mb-2 text-indigo-400">Create Category</h3>
+                    <div class="flex gap-2">
+                        <input type="text" name="name" placeholder="Category Name" required class="flex-1 bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm">
+                        <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded text-sm">+</button>
+                    </div>
+                </form>
+
+                <!-- Create Channel -->
+                <form action="/api/create-channel" method="POST" class="border border-slate-700 p-4 rounded bg-slate-900/50">
+                    <input type="hidden" name="guildId" value="<%= selectedGuildId %>">
+                    <h3 class="font-bold text-sm mb-2 text-indigo-400">Create Text Channel</h3>
+                    <div class="space-y-2">
+                        <input type="text" name="name" placeholder="Channel Name" required class="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm">
+                        <select name="parentId" class="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm">
                             <option value="">-- No Category --</option>
                             <% guildCategories.forEach(c => { %>
-                                <option value="<%= c.id %>" <%= config.ticketCategoryId === c.id ? 'selected' : '' %>><%= c.name %></option>
+                                <option value="<%= c.id %>"><%= c.name %></option>
                             <% }) %>
                         </select>
-                        <p class="text-xs text-slate-500 mt-1">New tickets will be created under this category.</p>
+                        <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded text-sm">Create Channel</button>
                     </div>
+                </form>
 
-                    <div>
-                        <label class="block text-sm font-medium mb-1">Transcript Channel</label>
-                        <select name="transcriptChannelId" class="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 focus:outline-none focus:border-indigo-500">
-                            <option value="">-- No Logs --</option>
-                            <% guildChannels.forEach(c => { %>
-                                <option value="<%= c.id %>" <%= config.transcriptChannelId === c.id ? 'selected' : '' %>><%= c.name %></option>
-                            <% }) %>
-                        </select>
-                        <p class="text-xs text-slate-500 mt-1">Closed ticket transcripts will be sent here.</p>
-                    </div>
-
-                    <div>
-                        <label class="block text-sm font-medium mb-1">Support Role</label>
-                        <select name="roleId" class="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 focus:outline-none focus:border-indigo-500">
-                            <option value="">-- No Role --</option>
-                            <% guildRoles.forEach(r => { %>
-                                <option value="<%= r.id %>" <%= config.supportRoleId === r.id ? 'selected' : '' %>><%= r.name %></option>
-                            <% }) %>
-                        </select>
-                        <p class="text-xs text-slate-500 mt-1">Users with this role can see/manage tickets.</p>
-                    </div>
-                </div>
-
-                <div>
-                    <label class="block text-sm font-medium mb-1">Welcome Message</label>
-                    <textarea name="welcomeMsg" class="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 focus:outline-none focus:border-indigo-500 h-24"><%= config.welcomeMessage || 'Support will be with you shortly.' %></textarea>
-                </div>
-                <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded">Save Settings</button>
-            </form>
+            </div>
         </div>
 
         <!-- Recent Tickets -->
