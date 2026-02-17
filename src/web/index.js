@@ -107,7 +107,7 @@ async function startWeb(client) {
             closed: await prisma.ticket.count({ where: { status: 'CLOSED' } })
         };
 
-        const config = await prisma.guildConfig.findFirst();
+        const config = await prisma.guildConfig.findFirst({ include: { categories: true } });
 
         // --- Fetch Guilds Logic ---
         let availableGuilds = [];
@@ -217,7 +217,7 @@ async function startWeb(client) {
             }
         } catch (error) { console.error(error); }
 
-        const config = await prisma.guildConfig.findFirst();
+        const config = await prisma.guildConfig.findFirst({ include: { categories: true } });
         let targetGuildId = req.query.guild || (config ? config.guildId : null);
         
         if (targetGuildId) {
@@ -478,7 +478,7 @@ async function startWeb(client) {
     });
 
     app.post('/api/create-category-settings', requireAuth, async (req, res) => {
-        const { name, emoji, guildId } = req.body;
+        const { name, emoji, parentId, guildId } = req.body;
         
         try {
             let config = await prisma.guildConfig.findFirst({ where: { guildId } });
@@ -490,7 +490,8 @@ async function startWeb(client) {
                 data: {
                     configId: config.id,
                     name,
-                    emoji
+                    emoji,
+                    discordCategoryId: parentId || null
                 }
             });
             res.sendStatus(200);
