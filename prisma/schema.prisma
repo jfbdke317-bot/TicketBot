@@ -13,6 +13,7 @@ datasource db {
 model GuildConfig {
   id              String   @id @default("config") // Singleton config for single guild bot
   guildId         String?
+  // Deprecated single category ID in favor of TicketCategory model
   ticketCategoryId String?
   transcriptChannelId String?
   supportRoleId   String?
@@ -22,6 +23,22 @@ model GuildConfig {
   panelChannelId  String?
   maxTickets      Int      @default(1)
   autoCloseHours  Int      @default(24) // 0 to disable
+  
+  categories      TicketCategory[]
+}
+
+model TicketCategory {
+  id              String   @id @default(uuid())
+  configId        String
+  config          GuildConfig @relation(fields: [configId], references: [id])
+  
+  name            String
+  description     String?
+  emoji           String?  @default("📩")
+  buttonStyle     String   @default("Primary") // Primary, Secondary, Success, Danger
+  
+  discordCategoryId String? // The Discord Category ID where tickets of this type go
+  supportRoleId   String?   // Specific role for this category (overrides global)
 }
 
 model Ticket {
@@ -32,7 +49,7 @@ model Ticket {
   claimedBy   String?
   closedBy    String?
   status      String   @default("OPEN") // OPEN, CLOSED, REQUEST_CLOSE
-  type        String?  // SUPPORT, BILLING, etc.
+  type        String?  // The category name/id
   createdAt   DateTime @default(now())
   closedAt    DateTime?
   transcript  String?  // HTML Content or Link
