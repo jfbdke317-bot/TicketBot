@@ -52,6 +52,41 @@
                     </div>
                 </div>
 
+                <!-- Categories Management -->
+                <div>
+                    <h3 class="text-lg font-bold text-indigo-400 mb-4 border-b border-slate-700 pb-2">Ticket Categories</h3>
+                    <div class="space-y-3 mb-4">
+                        <% if (config.categories && config.categories.length > 0) { %>
+                            <% config.categories.forEach(cat => { %>
+                                <div class="flex items-center justify-between bg-slate-950 p-3 rounded border border-slate-700">
+                                    <div class="flex items-center gap-3">
+                                        <span class="text-2xl"><%= cat.emoji %></span>
+                                        <div>
+                                            <p class="font-bold"><%= cat.name %></p>
+                                            <p class="text-xs text-slate-500">ID: <%= cat.id %></p>
+                                        </div>
+                                    </div>
+                                    <button type="button" onclick="deleteCategory('<%= cat.id %>')" class="text-red-400 hover:text-red-300 p-2">
+                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                                    </button>
+                                </div>
+                            <% }) %>
+                        <% } else { %>
+                            <p class="text-slate-500 italic">No categories created yet. Use /setup-panel in Discord or add one below.</p>
+                        <% } %>
+                    </div>
+                    
+                    <!-- Add Category Form -->
+                    <div class="bg-slate-900/50 p-4 rounded border border-slate-700 border-dashed">
+                        <h4 class="text-sm font-bold mb-3 text-slate-300">Add New Category</h4>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+                            <input type="text" id="newCatName" placeholder="Name (e.g. Billing)" class="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm">
+                            <input type="text" id="newCatEmoji" placeholder="Emoji (e.g. 💰)" class="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm">
+                            <button type="button" onclick="createCategory()" class="bg-indigo-600 hover:bg-indigo-700 text-white rounded px-3 py-2 text-sm font-bold">Add Category</button>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Roles & Channels -->
                 <div>
                     <h3 class="text-lg font-bold text-indigo-400 mb-4 border-b border-slate-700 pb-2">Roles & Channels</h3>
@@ -106,5 +141,35 @@
         </div>
 
     </main>
+    <script>
+        async function deleteCategory(catId) {
+            if (!confirm('Are you sure you want to delete this category?')) return;
+            try {
+                const res = await fetch('/api/delete-category', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ categoryId: catId, guildId: '<%= selectedGuildId %>' })
+                });
+                if (res.ok) window.location.reload();
+                else alert('Failed to delete category');
+            } catch (e) { console.error(e); alert('Error deleting category'); }
+        }
+
+        async function createCategory() {
+            const name = document.getElementById('newCatName').value;
+            const emoji = document.getElementById('newCatEmoji').value || '📩';
+            if (!name) return alert('Category name is required');
+
+            try {
+                const res = await fetch('/api/create-category-settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, emoji, guildId: '<%= selectedGuildId %>' })
+                });
+                if (res.ok) window.location.reload();
+                else alert('Failed to create category');
+            } catch (e) { console.error(e); alert('Error creating category'); }
+        }
+    </script>
 </body>
 </html>
