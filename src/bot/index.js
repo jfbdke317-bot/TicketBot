@@ -215,16 +215,26 @@ async function handleSelectMenu(interaction) {
         // Save selected channel (in a real app, maybe store in a temporary setup state or DB)
         // For simplicity, we pass it to the next step via customId or just ask for categories here.
         
-        await interaction.update({ content: `✅ Channel selected: <#${channelId}>\n\nStep 2: Let's create a category. Click 'Add Category' to start.`, components: [
-            new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId(`setup_add_cat_${channelId}`).setLabel('Add Category').setStyle(ButtonStyle.Success)
-            )
-        ] });
+        await interaction.update({ 
+            content: `✅ Channel selected: <#${channelId}>\n\nClick **Add Category** to create a button on the panel (e.g. Support, Billing).\nWhen you are done adding categories, click **Finish Setup**.`, 
+            components: [
+                new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId(`setup_add_cat_${channelId}`).setLabel('Add Category').setStyle(ButtonStyle.Success),
+                    new ButtonBuilder().setCustomId(`setup_finish_${channelId}`).setLabel('Finish Setup').setStyle(ButtonStyle.Secondary)
+                )
+            ] 
+        });
     }
 }
 
 async function handleButton(interaction) {
     const { customId } = interaction;
+
+    if (customId.startsWith('setup_finish_')) {
+        const channelId = customId.split('setup_finish_')[1];
+        await interaction.update({ content: `🎉 **Setup Complete!**\nThe ticket panel has been sent to <#${channelId}>.\nYou can now dismiss this message.`, components: [] });
+        return;
+    }
 
     if (customId.startsWith('setup_add_cat_')) {
         const channelId = customId.split('setup_add_cat_')[1];
@@ -387,8 +397,25 @@ async function handleModal(interaction) {
                 );
             });
 
+            // If no categories exist yet, don't send/edit yet or send a placeholder?
+            // Actually, we should try to edit the existing message if possible, or send new.
+            // For simplicity, let's just delete the last bot message in that channel if it was a panel? 
+            // Or just append. A clean way is difficult without storing messageID.
+            // Let's just send a new one for now, user can delete old ones.
+            
             await targetChannel.send({ embeds: [embed], components: [row] });
-            await interaction.reply({ content: `✅ Added category **${name}** and sent/updated panel in <#${targetChannelId}>`, ephemeral: true });
+            
+            // Ask if they want to add another
+            await interaction.reply({ 
+                content: `✅ Added category **${name}**!\nDo you want to add another one?`, 
+                components: [
+                    new ActionRowBuilder().addComponents(
+                        new ButtonBuilder().setCustomId(`setup_add_cat_${targetChannelId}`).setLabel('Add Another Category').setStyle(ButtonStyle.Success),
+                        new ButtonBuilder().setCustomId(`setup_finish_${targetChannelId}`).setLabel('Finish Setup').setStyle(ButtonStyle.Secondary)
+                    )
+                ],
+                ephemeral: true 
+            });
         }
         return;
     }
