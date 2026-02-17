@@ -23,6 +23,31 @@ app.use(session({
 
 const DISCORD_API = 'https://discord.com/api/v10';
 
+async function getAvailableGuilds(accessToken, client) {
+    const guilds = [];
+    try {
+        const response = await axios.get(`${DISCORD_API}/users/@me/guilds`, {
+            headers: { Authorization: `Bearer ${accessToken}` }
+        });
+        
+        for (const g of response.data) {
+            // Check if bot is in guild (cache check is fast)
+            if (client.guilds.cache.has(g.id)) {
+                // Check permissions (0x20 = MANAGE_GUILD, 0x8 = ADMINISTRATOR)
+                const permissions = BigInt(g.permissions);
+                const hasPerms = (permissions & 0x20n) === 0x20n || (permissions & 0x8n) === 0x8n;
+                
+                if (hasPerms) {
+                    guilds.push({ id: g.id, name: g.name, icon: g.icon });
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Error fetching user guilds:', error.message);
+    }
+    return guilds;
+}
+
 // Middleware to check auth
 const requireAuth = (req, res, next) => {
     if (!req.session.user) return res.redirect('/');
@@ -110,34 +135,10 @@ async function startWeb(client) {
         };
 
         // --- Fetch Guilds Logic ---
-        let availableGuilds = [];
+        let availableGuilds = await getAvailableGuilds(req.session.user.accessToken, client);
         let selectedGuild = null;
 
-        try {
-            // 1. Get User's Guilds
-            const userGuildsResponse = await axios.get(`${DISCORD_API}/users/@me/guilds`, {
-                headers: { Authorization: `Bearer ${req.session.user.accessToken}` }
-            });
-
-            // 2. Filter for mutual guilds with permissions
-            for (const g of userGuildsResponse.data) {
-                const guild = client.guilds.cache.get(g.id);
-                if (guild) {
-                    const permissions = BigInt(g.permissions);
-                    const MANAGE_GUILD = 0x20n;
-                    const ADMINISTRATOR = 0x8n;
-                    const hasPerms = (permissions & MANAGE_GUILD) === MANAGE_GUILD || (permissions & ADMINISTRATOR) === ADMINISTRATOR;
-                    
-                    if (hasPerms) {
-                        availableGuilds.push({ id: g.id, name: g.name, icon: g.icon });
-                    }
-                }
-            }
-        } catch (error) {
-            console.error('Error fetching user guilds:', error.message);
-        }
-
-        // 3. Determine which guild to show
+        // Determine which guild to show
         let targetGuildId = req.query.guild;
         
         if (!targetGuildId && availableGuilds.length > 0) {
@@ -201,28 +202,8 @@ async function startWeb(client) {
         const inviteUrl = `https://discord.com/oauth2/authorize?client_id=${process.env.DISCORD_CLIENT_ID}&permissions=8&scope=bot%20applications.commands`;
 
         // Similar Guild Fetching Logic as Dashboard (Refactor into a helper function later)
-        let availableGuilds = [];
+        let availableGuilds = await getAvailableGuilds(req.session.user.accessToken, client);
         let selectedGuild = null;
-
-        try {
-            const userGuildsResponse = await axios.get(`${DISCORD_API}/users/@me/guilds`, {
-                headers: { Authorization: `Bearer ${req.session.user.accessToken}` }
-            });
-
-            for (const g of userGuildsResponse.data) {
-                const guild = client.guilds.cache.get(g.id);
-                if (guild) {
-                    const permissions = BigInt(g.permissions);
-                    const MANAGE_GUILD = 0x20n;
-                    const ADMINISTRATOR = 0x8n;
-                    const hasPerms = (permissions & MANAGE_GUILD) === MANAGE_GUILD || (permissions & ADMINISTRATOR) === ADMINISTRATOR;
-                    
-                    if (hasPerms) {
-                        availableGuilds.push({ id: g.id, name: g.name, icon: g.icon });
-                    }
-                }
-            }
-        } catch (error) { console.error(error); }
 
         let targetGuildId = req.query.guild;
         
@@ -280,6 +261,11 @@ async function startWeb(client) {
     app.get('/tickets', requireAuth, async (req, res) => {
         const inviteUrl = `https://discord.com/oauth2/authorize?client_id=${process.env.DISCORD_CLIENT_ID}&permissions=8&scope=bot%20applications.commands`;
         
+        // Fetch Guilds for filtering
+        let availableGuilds = await getAvailableGuilds(req.session.user.accessToken, client);
+        let selectedGuildId = req.query.guild;
+        if (!selectedGuildId && availableGuilds.length > 0) selectedGuildId = availableGuilds[0].id;
+
         // Pagination & Filtering
         const page = parseInt(req.query.page) || 1;
         const limit = 25;
@@ -287,6 +273,7 @@ async function startWeb(client) {
         const search = req.query.search || undefined;
 
         const where = {};
+        if (selectedGuildId) where.guildId = selectedGuildId;
         if (statusFilter) where.status = statusFilter;
         if (search) where.OR = [
             { id: { contains: search } },
@@ -310,7 +297,9 @@ async function startWeb(client) {
             currentPage: page,
             totalPages: Math.ceil(totalTickets / limit),
             statusFilter,
-            search
+            search,
+            availableGuilds,
+            selectedGuildId
         });
     });
 
@@ -319,38 +308,16 @@ async function startWeb(client) {
         const inviteUrl = `https://discord.com/oauth2/authorize?client_id=${process.env.DISCORD_CLIENT_ID}&permissions=8&scope=bot%20applications.commands`;
 
         // Find mutual guilds where user has ManageGuild permission
-        const guilds = [];
-        try {
-            // Get user's guilds from Discord API
-            const userGuildsResponse = await axios.get(`${DISCORD_API}/users/@me/guilds`, {
-                headers: { Authorization: `Bearer ${req.session.user.accessToken}` }
-            });
-            
-            for (const g of userGuildsResponse.data) {
-                // Check if bot is in guild
-                const guild = client.guilds.cache.get(g.id);
-                if (guild) {
-                    // Check permissions (0x20 = MANAGE_GUILD, 0x8 = ADMINISTRATOR)
-                    // Permissions is a string in the API response
-                    const permissions = BigInt(g.permissions);
-                    const MANAGE_GUILD = 0x20n;
-                    const ADMINISTRATOR = 0x8n;
-                    
-                    const hasPerms = (permissions & MANAGE_GUILD) === MANAGE_GUILD || (permissions & ADMINISTRATOR) === ADMINISTRATOR;
-                    
-                    if (hasPerms) {
-                        guilds.push({ id: g.id, name: g.name, icon: g.icon });
-                    }
-                }
-            }
-        } catch (error) {
-            console.error('Failed to fetch user guilds:', error.message);
-        }
+        const guilds = await getAvailableGuilds(req.session.user.accessToken, client);
+
+        let selectedGuildId = req.query.guild;
+        if (!selectedGuildId && guilds.length > 0) selectedGuildId = guilds[0].id;
 
         res.render('deploy', {
             user: req.session.user,
             guilds,
-            inviteUrl
+            inviteUrl,
+            selectedGuildId
         });
     });
 
