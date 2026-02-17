@@ -107,8 +107,6 @@ async function startWeb(client) {
             closed: await prisma.ticket.count({ where: { status: 'CLOSED' } })
         };
 
-        const config = await prisma.guildConfig.findFirst({ include: { categories: true } });
-
         // --- Fetch Guilds Logic ---
         let availableGuilds = [];
         let selectedGuild = null;
@@ -138,7 +136,11 @@ async function startWeb(client) {
         }
 
         // 3. Determine which guild to show
-        let targetGuildId = req.query.guild || (config ? config.guildId : null);
+        let targetGuildId = req.query.guild;
+        
+        if (!targetGuildId && availableGuilds.length > 0) {
+            targetGuildId = availableGuilds[0].id;
+        }
         
         if (targetGuildId) {
              const found = availableGuilds.find(g => g.id === targetGuildId);
@@ -147,9 +149,12 @@ async function startWeb(client) {
              }
         }
 
-        // Fallback if no valid selection
-        if (!selectedGuild && availableGuilds.length > 0) {
-            selectedGuild = client.guilds.cache.get(availableGuilds[0].id);
+        let config = null;
+        if (selectedGuild) {
+            config = await prisma.guildConfig.findFirst({ 
+                where: { guildId: selectedGuild.id },
+                include: { categories: true } 
+            });
         }
 
         // Fetch Guild Info for Settings (Channels/Roles)
@@ -217,17 +222,27 @@ async function startWeb(client) {
             }
         } catch (error) { console.error(error); }
 
-        const config = await prisma.guildConfig.findFirst({ include: { categories: true } });
-        let targetGuildId = req.query.guild || (config ? config.guildId : null);
+        let targetGuildId = req.query.guild;
         
+        // If no guild specified, default to the first available guild
+        if (!targetGuildId && availableGuilds.length > 0) {
+            targetGuildId = availableGuilds[0].id;
+        }
+
         if (targetGuildId) {
              const found = availableGuilds.find(g => g.id === targetGuildId);
              if (found) {
                  selectedGuild = client.guilds.cache.get(targetGuildId);
              }
         }
-        if (!selectedGuild && availableGuilds.length > 0) {
-            selectedGuild = client.guilds.cache.get(availableGuilds[0].id);
+
+        // Fetch config SPECIFIC to the selected guild
+        let config = null;
+        if (selectedGuild) {
+            config = await prisma.guildConfig.findFirst({ 
+                where: { guildId: selectedGuild.id },
+                include: { categories: true } 
+            });
         }
 
         let guildChannels = [];
@@ -438,28 +453,34 @@ async function startWeb(client) {
         // Get guildId from client if not passed (or validate it)
         const targetGuildId = guildId || client.guilds.cache.first()?.id;
 
-        await prisma.guildConfig.upsert({
-            where: { id: 'config' },
-            update: {
-                guildId: targetGuildId,
-                ticketCategoryId: categoryId,
-                transcriptChannelId: transcriptChannelId,
-                supportRoleId: roleId,
-                welcomeMessage: welcomeMsg,
-                maxTickets: parseInt(maxTickets) || 1,
-                autoCloseHours: parseInt(autoCloseHours) || 24
-            },
-            create: {
-                id: 'config',
-                guildId: targetGuildId,
-                ticketCategoryId: categoryId,
-                transcriptChannelId: transcriptChannelId,
-                supportRoleId: roleId,
-                welcomeMessage: welcomeMsg,
-                maxTickets: parseInt(maxTickets) || 1,
-                autoCloseHours: parseInt(autoCloseHours) || 24
-            }
-        });
+        const existingConfig = await prisma.guildConfig.findFirst({ where: { guildId: targetGuildId } });
+
+        if (existingConfig) {
+            await prisma.guildConfig.update({
+                where: { id: existingConfig.id },
+                data: {
+                    ticketCategoryId: categoryId,
+                    transcriptChannelId: transcriptChannelId,
+                    supportRoleId: roleId,
+                    welcomeMessage: welcomeMsg,
+                    maxTickets: parseInt(maxTickets) || 1,
+                    autoCloseHours: parseInt(autoCloseHours) || 24
+                }
+            });
+        } else {
+            await prisma.guildConfig.create({
+                data: {
+                    id: targetGuildId, // Use guildId as ID to support multiple guilds
+                    guildId: targetGuildId,
+                    ticketCategoryId: categoryId,
+                    transcriptChannelId: transcriptChannelId,
+                    supportRoleId: roleId,
+                    welcomeMessage: welcomeMsg,
+                    maxTickets: parseInt(maxTickets) || 1,
+                    autoCloseHours: parseInt(autoCloseHours) || 24
+                }
+            });
+        }
         
         res.redirect('/settings?guild=' + targetGuildId + '&success=saved');
     });
@@ -483,7 +504,8 @@ async function startWeb(client) {
         try {
             let config = await prisma.guildConfig.findFirst({ where: { guildId } });
             if (!config) {
-                config = await prisma.guildConfig.create({ data: { guildId, id: 'config' } });
+                // Use guildId as the unique ID for the config to avoid collision with default "config" ID
+                config = await prisma.guildConfig.create({ data: { guildId, id: guildId } });
             }
 
             await prisma.ticketCategory.create({
