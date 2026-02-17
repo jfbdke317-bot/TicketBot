@@ -59,8 +59,23 @@
 
         <!-- Settings -->
         <div class="card mb-8" id="settings">
-            <h2 class="text-xl font-bold mb-4">Configuration (<%= guildName %>)</h2>
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-bold">Configuration</h2>
+                
+                <!-- Server Switcher -->
+                <% if (availableGuilds && availableGuilds.length > 0) { %>
+                <form action="/dashboard" method="GET">
+                    <select name="guild" onchange="this.form.submit()" class="bg-slate-950 border border-slate-700 rounded px-3 py-1 text-sm focus:outline-none focus:border-indigo-500">
+                        <% availableGuilds.forEach(g => { %>
+                            <option value="<%= g.id %>" <%= selectedGuildId === g.id ? 'selected' : '' %>><%= g.name %></option>
+                        <% }) %>
+                    </select>
+                </form>
+                <% } %>
+            </div>
+
             <form action="/api/settings" method="POST" class="space-y-4">
+                <input type="hidden" name="guildId" value="<%= selectedGuildId %>">
                 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
