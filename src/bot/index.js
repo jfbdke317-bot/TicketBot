@@ -364,7 +364,7 @@ async function handleModal(interaction) {
         // Save Category to DB
         let config = await prisma.guildConfig.findFirst({ where: { guildId: interaction.guildId } });
         if (!config) {
-            config = await prisma.guildConfig.create({ data: { guildId: interaction.guildId, id: 'config' } }); // Use dynamic ID in real app
+            config = await prisma.guildConfig.create({ data: { guildId: interaction.guildId, id: interaction.guildId } });
         }
 
         const category = await prisma.ticketCategory.create({
