@@ -12,7 +12,8 @@ const {
     ModalBuilder, 
     TextInputBuilder, 
     TextInputStyle,
-    InteractionType
+    InteractionType,
+    StringSelectMenuBuilder // Added
 } = require('discord.js');
 const prisma = require('../utils/prisma');
 const fs = require('fs');
@@ -75,6 +76,11 @@ const COMMANDS = [
             description: 'The user to unban',
             required: true
         }]
+    },
+    {
+        name: 'setup-panel',
+        description: 'Start interactive setup wizard for ticket panel',
+        default_member_permissions: PermissionFlagsBits.Administrator.toString()
     }
 ];
 
@@ -102,6 +108,7 @@ async function startBot(client) {
         try {
             if (interaction.isChatInputCommand()) return handleCommand(interaction);
             if (interaction.isButton()) return handleButton(interaction);
+            if (interaction.isStringSelectMenu()) return handleSelectMenu(interaction);
             if (interaction.isModalSubmit()) return handleModal(interaction);
         } catch (error) {
             console.error('Interaction Error:', error);
@@ -180,12 +187,84 @@ async function handleCommand(interaction) {
 
         await interaction.reply({ content: `✅ Unbanned ${user}.`, ephemeral: true });
     }
+    if (commandName === 'setup-panel') {
+        // Step 1: Ask for channel
+        const channels = interaction.guild.channels.cache
+            .filter(c => c.type === ChannelType.GuildText)
+            .first(25) // Discord limit for select menu
+            .map(c => ({ label: `#${c.name}`, value: c.id }));
+
+        const row = new ActionRowBuilder()
+            .addComponents(
+                new StringSelectMenuBuilder()
+                    .setCustomId('setup_select_channel')
+                    .setPlaceholder('Select a channel for the panel')
+                    .addOptions(channels)
+            );
+
+        await interaction.reply({ content: 'Step 1: Where should the ticket panel be sent?', components: [row], ephemeral: true });
+    }
 }
 
 const { closeTicket } = require('./utils');
+const { StringSelectMenuBuilder } = require('discord.js'); // Import Select Menu
+
+async function handleSelectMenu(interaction) {
+    if (interaction.customId === 'setup_select_channel') {
+        const channelId = interaction.values[0];
+        
+        // Save selected channel (in a real app, maybe store in a temporary setup state or DB)
+        // For simplicity, we pass it to the next step via customId or just ask for categories here.
+        
+        await interaction.update({ content: `✅ Channel selected: <#${channelId}>\n\nStep 2: Let's create a category. Click 'Add Category' to start.`, components: [
+            new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId(`setup_add_cat_${channelId}`).setLabel('Add Category').setStyle(ButtonStyle.Success)
+            )
+        ] });
+    }
+}
 
 async function handleButton(interaction) {
     const { customId } = interaction;
+
+    if (customId.startsWith('setup_add_cat_')) {
+        const channelId = customId.split('setup_add_cat_')[1];
+        await interaction.showModal(
+            new ModalBuilder()
+                .setCustomId(`setup_cat_modal_${channelId}`)
+                .setTitle('New Ticket Category')
+                .addComponents(
+                    new ActionRowBuilder().addComponents(
+                        new TextInputBuilder().setCustomId('cat_name').setLabel('Category Name (e.g. Support)').setStyle(TextInputStyle.Short).setRequired(true)
+                    ),
+                    new ActionRowBuilder().addComponents(
+                        new TextInputBuilder().setCustomId('cat_emoji').setLabel('Emoji (e.g. 📩)').setStyle(TextInputStyle.Short).setRequired(false)
+                    )
+                )
+        );
+        return;
+    }
+
+    // Handle Category Buttons dynamically
+    if (customId.startsWith('open_cat_')) {
+        const catId = customId.split('open_cat_')[1];
+        
+        await interaction.showModal(
+            new ModalBuilder()
+                .setCustomId(`ticket_modal_${catId}`)
+                .setTitle('Create Ticket')
+                .addComponents(
+                    new ActionRowBuilder().addComponents(
+                        new TextInputBuilder()
+                            .setCustomId('ticket_reason')
+                            .setLabel('Reason for ticket')
+                            .setStyle(TextInputStyle.Paragraph)
+                            .setRequired(true)
+                    )
+                )
+        );
+        return;
+    }
 
     if (customId === 'open_ticket') {
         await interaction.showModal(
@@ -268,9 +347,58 @@ async function handleButton(interaction) {
 }
 
 async function handleModal(interaction) {
-    if (interaction.customId === 'ticket_modal') {
+    if (interaction.customId.startsWith('setup_cat_modal_')) {
+        const targetChannelId = interaction.customId.split('setup_cat_modal_')[1];
+        const name = interaction.fields.getTextInputValue('cat_name');
+        const emoji = interaction.fields.getTextInputValue('cat_emoji') || '📩';
+
+        // Save Category to DB
+        let config = await prisma.guildConfig.findFirst({ where: { guildId: interaction.guildId } });
+        if (!config) {
+            config = await prisma.guildConfig.create({ data: { guildId: interaction.guildId, id: 'config' } }); // Use dynamic ID in real app
+        }
+
+        const category = await prisma.ticketCategory.create({
+            data: {
+                configId: config.id,
+                name,
+                emoji
+            }
+        });
+
+        // Send Panel Update
+        const targetChannel = interaction.guild.channels.cache.get(targetChannelId);
+        if (targetChannel) {
+            // Fetch all categories
+            const allCats = await prisma.ticketCategory.findMany({ where: { configId: config.id } });
+            
+            const embed = new EmbedBuilder()
+                .setTitle('🎫 Support Tickets')
+                .setDescription('Select a category below to open a ticket.')
+                .setColor('#2b2d31');
+
+            const row = new ActionRowBuilder();
+            allCats.forEach(cat => {
+                row.addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`open_cat_${cat.id}`)
+                        .setLabel(cat.name)
+                        .setEmoji(cat.emoji)
+                        .setStyle(ButtonStyle.Primary)
+                );
+            });
+
+            await targetChannel.send({ embeds: [embed], components: [row] });
+            await interaction.reply({ content: `✅ Added category **${name}** and sent/updated panel in <#${targetChannelId}>`, ephemeral: true });
+        }
+        return;
+    }
+
+    if (interaction.customId.startsWith('ticket_modal_') || interaction.customId === 'ticket_modal') {
         await interaction.deferReply({ ephemeral: true });
         
+        const catId = interaction.customId.startsWith('ticket_modal_') ? interaction.customId.split('ticket_modal_')[1] : null;
+
         // Check Ban Status
         const userRecord = await prisma.user.findUnique({ where: { id: interaction.user.id } });
         if (userRecord && userRecord.isBanned) {
@@ -283,10 +411,20 @@ async function handleModal(interaction) {
         // Find or create GuildConfig
         let config = await prisma.guildConfig.findFirst({ where: { guildId: guild.id } });
         
-        // Create Channel
-        const channelName = `ticket-${interaction.user.username.replace(/[^a-zA-Z0-9]/g, '')}`.slice(0, 25);
+        // Determine Parent Category (Discord Channel ID)
+        let parent = config?.ticketCategoryId || null;
+        let catName = 'ticket';
+
+        if (catId) {
+            const ticketCat = await prisma.ticketCategory.findUnique({ where: { id: catId } });
+            if (ticketCat) {
+                if (ticketCat.discordCategoryId) parent = ticketCat.discordCategoryId;
+                catName = ticketCat.name.toLowerCase();
+            }
+        }
         
-        const parent = config?.ticketCategoryId || null;
+        // Create Channel
+        const channelName = `${catName}-${interaction.user.username.replace(/[^a-zA-Z0-9]/g, '')}`.slice(0, 25);
         
         try {
             const channel = await guild.channels.create({
@@ -315,13 +453,14 @@ async function handleModal(interaction) {
                     channelId: channel.id,
                     guildId: guild.id,
                     openerId: interaction.user.id,
-                    status: 'OPEN'
+                    status: 'OPEN',
+                    type: catName
                 }
             });
 
             const embed = new EmbedBuilder()
                 .setTitle(`Ticket: ${interaction.user.tag}`)
-                .setDescription(`**Reason:**\n${reason}\n\nSupport will be with you shortly.`)
+                .setDescription(`**Category:** ${catName}\n**Reason:**\n${reason}\n\nSupport will be with you shortly.`)
                 .setColor('#2b2d31')
                 .setTimestamp();
 
