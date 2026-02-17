@@ -79,9 +79,10 @@
                     <!-- Add Category Form -->
                     <div class="bg-slate-900/50 p-4 rounded border border-slate-700 border-dashed">
                         <h4 class="text-sm font-bold mb-3 text-slate-300">Add New Category</h4>
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-2">
                             <input type="text" id="newCatName" placeholder="Name (e.g. Billing)" class="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm">
                             <input type="text" id="newCatEmoji" placeholder="Emoji (e.g. 💰)" class="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm">
+                            <input type="text" id="newCatParentId" placeholder="Discord Category ID (Optional)" class="bg-slate-950 border border-slate-700 rounded px-3 py-2 text-sm">
                             <button type="button" onclick="createCategory()" class="bg-indigo-600 hover:bg-indigo-700 text-white rounded px-3 py-2 text-sm font-bold">Add Category</button>
                         </div>
                     </div>
@@ -158,13 +159,14 @@
         async function createCategory() {
             const name = document.getElementById('newCatName').value;
             const emoji = document.getElementById('newCatEmoji').value || '📩';
+            const parentId = document.getElementById('newCatParentId').value;
             if (!name) return alert('Category name is required');
 
             try {
                 const res = await fetch('/api/create-category-settings', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name, emoji, guildId: '<%= selectedGuildId %>' })
+                    body: JSON.stringify({ name, emoji, parentId, guildId: '<%= selectedGuildId %>' })
                 });
                 if (res.ok) window.location.reload();
                 else alert('Failed to create category');
