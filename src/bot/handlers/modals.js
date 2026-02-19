@@ -130,7 +130,7 @@ async function handleModal(interaction, client) {
                     },
                     {
                         id: interaction.user.id,
-                        allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles]
+                        allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.ReadMessageHistory]
                     },
                     {
                         id: client.user.id,
@@ -146,7 +146,8 @@ async function handleModal(interaction, client) {
                     await channel.permissionOverwrites.create(config.supportRoleId, {
                         ViewChannel: true,
                         SendMessages: true,
-                        AttachFiles: true
+                        AttachFiles: true,
+                        ReadMessageHistory: true
                     });
                 } catch (e) {
                     console.error('Failed to add support role permissions:', e);

@@ -93,7 +93,7 @@ async function handleCommand(interaction, client) {
             return interaction.reply({ content: '❌ This is not an open ticket channel.', ephemeral: true });
         }
         const user = interaction.options.getUser('user');
-        await interaction.channel.permissionOverwrites.edit(user.id, { ViewChannel: true, SendMessages: true });
+        await interaction.channel.permissionOverwrites.edit(user.id, { ViewChannel: true, SendMessages: true, ReadMessageHistory: true });
         await interaction.reply({ content: `✅ Added ${user} to the ticket.` });
     }
     
